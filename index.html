@@ -1,78 +1,129 @@
-const editor = document.getElementById('editor');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" id="meta-theme" content="#eff1f5">
+    <title>Editor</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    
+    <style>
+        .theme-latte {
+            --base: #eff1f5; --text: #4c4f69; --lavender: #7287fd;
+            --crust: #ccd0da; --mantle: #e6e9ef; --line-bg: #e6e9ef;
+            --token-comment: #9ca0b0; --token-selector: #e64553;
+            --token-string: #40a02b; --token-keyword: #8839ef; --token-attr: #fe640b;
+            --tab-color: #bcc0cc;
+        }
+
+        .theme-frappe {
+            --base: #303446; --text: #c6d0f5; --lavender: #babbf1;
+            --crust: #232634; --mantle: #292c3c; --line-bg: #292c3c;
+            --token-comment: #838ba7; --token-selector: #e78284;
+            --token-string: #a6d189; --token-keyword: #ca9ee6; --token-attr: #ef9f76;
+            --tab-color: #414559;
+        }
+
+        * { box-sizing: border-box; }
+        body, html { margin: 0; padding: 0; background-color: var(--base); height: 100%; width: 100%; overflow: hidden; transition: background-color 0.2s; font-family: "Courier New", Courier, monospace; }
+        body.pulse { background-color: var(--mantle); }
+        
+        #container { position: relative; display: flex; height: 100vh; padding-top: 50px; }
+
+        #gutter {
+            width: 60px; height: 100%; background: var(--line-bg);
+            color: var(--token-comment); text-align: right; padding: 20px 10px 0 0;
+            font-size: inherit; line-height: 1.7; user-select: none; overflow: hidden; flex-shrink: 0;
+        }
+
+        .hide-lines #gutter { display: none; }
+
+        #editor-wrapper { position: relative; flex-grow: 1; height: 100%; overflow: hidden; }
+
+        #editor, #highlight-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            padding: 20px; margin: 0; line-height: 1.7; tab-size: 4; 
+            white-space: pre; word-wrap: break-word; overflow: auto; border: none; outline: none;
+            background: transparent; font-size: inherit; font-family: inherit;
+        }
+
+        #editor { color: transparent; caret-color: var(--text); z-index: 2; resize: none; }
+        #highlight-layer { z-index: 1; pointer-events: none; color: var(--text); }
+
+        .tab-symbol { color: var(--tab-color); position: absolute; pointer-events: none; opacity: 0.6; }
+
+        #filename-display {
+            position: fixed; top: 15px; left: 20px; font-size: 0.8rem; 
+            color: var(--text); opacity: 0.5; z-index: 10;
+        }
+
+        /* Prism Tokens */
+        .token.comment { color: var(--token-comment); font-style: italic; }
+        .token.string { color: var(--token-string); }
+        .token.keyword { color: var(--token-keyword); font-weight: bold; }
+        .token.function { color: var(--lavender); }
+        .token.selector, .token.tag { color: var(--token-selector); }
+        .token.attr-name { color: var(--token-attr); }
+    </style>
+</head>
+<body class="theme-latte">
+
+<div id="filename-display">untitled</div>
+
+<div id="container">
+    <div id="gutter">1</div>
+    <div id="editor-wrapper">
+        <pre id="highlight-layer" aria-hidden="true"><code id="highlight-content" class="language-javascript"></code></pre>
+        <textarea id="editor" spellcheck="false" autocomplete="off" placeholder="..."></textarea>
+    </div>
+</div>
+
+<script>
+    const editor = document.getElementById('editor');
     const highlightContent = document.getElementById('highlight-content');
+    const gutter = document.getElementById('gutter');
     const display = document.getElementById('filename-display');
-    const layer = document.getElementById('highlight-layer');
     const metaTheme = document.getElementById('meta-theme');
+    
     let fileHandle = null;
     let isModified = false;
 
     let state = {
-        theme: 'latte',
-        fontSize: 18,
+        theme: localStorage.getItem('theme') || 'latte',
+        showLines: localStorage.getItem('showLines') !== 'false',
+        fontSize: parseInt(localStorage.getItem('fontSize')) || 18,
         filename: 'untitled'
     };
 
-    // --- CORE TOGGLE FUNCTION ---
-    const toggleTheme = () => {
-        state.theme = (state.theme === 'latte') ? 'frappe' : 'latte';
-        
-        // Immediate UI Update
-        document.body.classList.remove('theme-latte', 'theme-frappe');
-        document.body.classList.add(`theme-${state.theme}`);
-        
-        // Meta & Storage
+    const updateUI = () => {
+        document.body.className = `theme-${state.theme} ${state.showLines ? '' : 'hide-lines'}`;
         metaTheme.setAttribute('content', state.theme === 'latte' ? '#eff1f5' : '#303446');
-        localStorage.setItem('editor-settings', JSON.stringify(state));
-        console.log("Theme switched to:", state.theme); // Debug check
-    };
-
-    const applyState = () => {
-        const saved = localStorage.getItem('editor-settings');
-        if (saved) state = { ...state, ...JSON.parse(saved) };
-
-        document.body.classList.remove('theme-latte', 'theme-frappe');
-        document.body.classList.add(`theme-${state.theme}`);
-        metaTheme.setAttribute('content', state.theme === 'latte' ? '#eff1f5' : '#303446');
-        editor.style.fontSize = layer.style.fontSize = `${state.fontSize}px`;
+        document.body.style.fontSize = `${state.fontSize}px`;
         display.innerText = state.filename + (isModified ? ' •' : '');
+        document.title = state.filename;
     };
 
-    // --- THE FIX: MULTI-LAYER LISTENER ---
-    const handleShortcuts = (e) => {
-        const isMod = e.ctrlKey || e.metaKey;
-
-        // Try CTRL + B or CTRL + M (M is less likely to be blocked)
-        if (isMod && (e.code === 'KeyB' || e.code === 'KeyM')) {
-            e.preventDefault();
-            e.stopPropagation();
-            toggleTheme();
-        }
-
-        if (isMod && e.code === 'KeyS') { e.preventDefault(); saveFile(); }
-        if (isMod && e.code === 'KeyO') { e.preventDefault(); openFile(); }
+    const updateLines = () => {
+        const lines = editor.value.split('\n').length;
+        let lineNumbers = '';
+        for (let i = 1; i <= lines; i++) lineNumbers += i + '<br>';
+        gutter.innerHTML = lineNumbers;
     };
 
-    // Listen everywhere
-    window.addEventListener('keydown', handleShortcuts, true);
-    editor.addEventListener('keydown', handleShortcuts, true);
-
-    // --- REST OF LOGIC ---
     const updateHighlighting = () => {
         let text = editor.value;
-        text = text.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-        highlightContent.innerHTML = text;
+        let highlighted = text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/\t/g, '<span class="tab-symbol">»   </span>\t');
+
+        highlightContent.innerHTML = highlighted;
         Prism.highlightElement(highlightContent);
-    };
-
-    editor.oninput = () => {
-        updateHighlighting();
-        if (!isModified) { isModified = true; applyState(); }
-        localStorage.setItem('last-content', editor.value);
-    };
-
-    editor.onscroll = () => {
-        layer.scrollTop = editor.scrollTop;
-        layer.scrollLeft = editor.scrollLeft;
+        updateLines();
     };
 
     async function saveFile() {
@@ -84,8 +135,10 @@ const editor = document.getElementById('editor');
             const file = await fileHandle.getFile();
             state.filename = file.name;
             isModified = false;
-            applyState();
-        } catch (e) { }
+            updateUI();
+            document.body.classList.add('pulse');
+            setTimeout(() => document.body.classList.remove('pulse'), 150);
+        } catch (e) { fileHandle = null; }
     }
 
     async function openFile() {
@@ -95,16 +148,78 @@ const editor = document.getElementById('editor');
             editor.value = await file.text();
             state.filename = file.name;
             isModified = false;
-            applyState();
+            updateUI();
             updateHighlighting();
         } catch (e) {}
     }
 
-    window.onload = () => {
-        applyState();
-        const savedContent = localStorage.getItem('last-content');
-        if (savedContent) {
-            editor.value = savedContent;
+    const handleShortcuts = (e) => {
+        const isMod = e.ctrlKey || e.metaKey;
+
+        // Theme: Ctrl + B
+        if (isMod && e.code === 'KeyB') {
+            e.preventDefault();
+            state.theme = state.theme === 'latte' ? 'frappe' : 'latte';
+            localStorage.setItem('theme', state.theme);
+            updateUI();
+        }
+
+        // Lines: Ctrl + L
+        if (isMod && e.code === 'KeyL') {
+            e.preventDefault();
+            state.showLines = !state.showLines;
+            localStorage.setItem('showLines', state.showLines);
+            updateUI();
+        }
+
+        // Zoom: Ctrl + / Ctrl -
+        if (isMod && (e.key === '=' || e.key === '+')) {
+            e.preventDefault();
+            state.fontSize += 1;
+            localStorage.setItem('fontSize', state.fontSize);
+            updateUI();
+        }
+        if (isMod && e.key === '-') {
+            e.preventDefault();
+            state.fontSize = Math.max(8, state.fontSize - 1);
+            localStorage.setItem('fontSize', state.fontSize);
+            updateUI();
+        }
+
+        // File: Ctrl + S / Ctrl + O
+        if (isMod && e.code === 'KeyS') { e.preventDefault(); saveFile(); }
+        if (isMod && e.code === 'KeyO') { e.preventDefault(); openFile(); }
+
+        // Tab Handling
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            const start = editor.selectionStart;
+            const end = editor.selectionEnd;
+            editor.value = editor.value.substring(0, start) + "\t" + editor.value.substring(end);
+            editor.selectionStart = editor.selectionEnd = start + 1;
             updateHighlighting();
         }
     };
+
+    editor.addEventListener('input', () => {
+        updateHighlighting();
+        if (!isModified) { isModified = true; updateUI(); }
+        localStorage.setItem('last-content', editor.value);
+    });
+
+    editor.addEventListener('scroll', () => {
+        const layer = document.getElementById('highlight-layer');
+        layer.scrollTop = gutter.scrollTop = editor.scrollTop;
+        layer.scrollLeft = editor.scrollLeft;
+    });
+
+    window.addEventListener('keydown', handleShortcuts);
+    
+    window.onload = () => {
+        updateUI();
+        editor.value = localStorage.getItem('last-content') || '';
+        updateHighlighting();
+    };
+</script>
+</body>
+</html>
