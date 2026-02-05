@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#eff1f5">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Editor</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    
+    <style>
+        .theme-latte {
+            --base: #eff1f5; --text: #4c4f69; --lavender: #7287fd;
+            --crust: #dce0e8; --mantle: #e6e9ef;
+            --token-comment: #9ca0b0; --token-selector: #e64553;
+            --token-string: #40a02b; --token-keyword: #8839ef;
+            --token-attr: #fe640b;
+        }
+
+        .theme-frappe {
+            --base: #303446; --text: #c6d0f5; --lavender: #babbf1;
+            --crust: #232634; --mantle: #292c3c;
+            --token-comment: #838ba7; --token-selector: #e78284;
+            --token-string: #a6d189; --token-keyword: #ca9ee6;
+            --token-attr: #ef9f76;
+        }
+
+        * { box-sizing: border-box; }
+        body, html { margin: 0; padding: 0; background-color: var(--base); height: 100%; width: 100%; overflow: hidden; transition: background-color 0.25s ease; }
+        body.pulse { background-color: var(--mantle); }
+
+        #filename-display {
+            position: fixed; top: 15px; left: 20px;
+            font-family: "Courier New", Courier, serif;
+            font-size: 0.8rem; color: var(--text);
+            opacity: 0.3; z-index: 10; pointer-events: none;
+        }
+
+        #container { position: relative; width: 100%; height: 100%; padding: 60px 50px 50px 50px; }
+
+        #editor, #highlight-layer {
+            position: absolute; top: 60px; left: 50px;
+            width: calc(100% - 100px); height: calc(100% - 110px);
+            margin: 0; font-family: "Courier New", Courier, monospace;
+            font-size: 1.15rem; line-height: 1.7; tab-size: 4; 
+            white-space: pre; word-wrap: break-word; overflow: auto; border: none; outline: none;
+        }
+
+        #editor::-webkit-scrollbar { width: 4px; height: 4px; }
+        #editor::-webkit-scrollbar-thumb { background: var(--crust); border-radius: 10px; }
+        #editor { scrollbar-width: thin; scrollbar-color: var(--crust) transparent; }
+
+        #editor { background: transparent; color: transparent; caret-color: var(--text); z-index: 2; resize: none; }
+        #highlight-layer { z-index: 1; pointer-events: none; color: var(--text); }
+
+        .token.comment { color: var(--token-comment); font-style: italic; }
+        .token.string { color: var(--token-string); }
+        .token.keyword { color: var(--token-keyword); font-weight: bold; }
+        .token.selector, .token.tag { color: var(--token-selector); }
+        .token.attr-name { color: var(--token-attr); }
+        .token.function { color: var(--lavender); }
+
+        ::selection { background: var(--lavender); color: var(--base); }
+    </style>
+</head>
+<body class="theme-latte">
+
+<div id="filename-display">untitled</div>
+<div id="container">
+    <pre id="highlight-layer" aria-hidden="true"><code id="highlight-content" class="language-javascript"></code></pre>
+    <textarea id="editor" spellcheck="false" placeholder="..." autocomplete="off"></textarea>
+</div>
+
+<script>
+    const editor = document.getElementById('editor');
+    const highlightContent = document.getElementById('highlight-content');
+    const display = document.getElementById('filename-display');
+    const layer = document.getElementById('highlight-layer');
+    let fileHandle = null;
+
+    const updateTitle = (name) => {
+        const cleanName = name || 'untitled';
+        display.innerText = cleanName;
+        document.title = cleanName;
+        localStorage.setItem('last-filename', cleanName);
+    };
+
+    const updateHighlighting = () => {
+        let text = editor.value;
+        text = text.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+        highlightContent.innerHTML = text;
+        Prism.highlightElement(highlightContent);
+    };
+
+    editor.onscroll = () => { layer.scrollTop = editor.scrollTop; layer.scrollLeft = editor.scrollLeft; };
+    editor.oninput = () => { updateHighlighting(); localStorage.setItem('last-content', editor.value); };
+
+    async function saveFile() {
+        try {
+            if (!fileHandle) fileHandle = await window.showSaveFilePicker();
+            const writable = await fileHandle.createWritable();
+            await writable.write(editor.value);
+            await writable.close();
+            const file = await fileHandle.getFile();
+            updateTitle(file.name);
+            updateHighlighting();
+            document.body.classList.add('pulse');
+            setTimeout(() => document.body.classList.remove('pulse'), 150);
+        } catch (e) { fileHandle = null; }
+    }
+
+    async function openFile() {
+        try {
+            [fileHandle] = await window.showOpenFilePicker();
+            const file = await fileHandle.getFile();
+            editor.value = await file.text();
+            updateTitle(file.name);
+            updateHighlighting();
+        } catch (e) {}
+    }
+
+    window.onkeydown = (e) => {
+        const isMod = e.ctrlKey || e.metaKey;
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            editor.setRangeText('    ', editor.selectionStart, editor.selectionEnd, 'end');
+            updateHighlighting();
+        }
+        if (isMod && e.key.toLowerCase() === 's') { e.preventDefault(); saveFile(); }
+        if (isMod && e.key.toLowerCase() === 'o') { e.preventDefault(); openFile(); }
+        if (isMod && e.key.toLowerCase() === 'b') { e.preventDefault();
+            const isLatte = document.body.classList.contains('theme-latte');
+            document.body.classList.toggle('theme-latte', !isLatte);
+            document.body.classList.toggle('theme-frappe', isLatte);
+            localStorage.setItem('editor-theme', isLatte ? 'frappe' : 'latte');
+            document.querySelector('meta[name="theme-color"]').setAttribute('content', isLatte ? '#303446' : '#eff1f5');
+        }
+    };
+
+    window.onload = () => {
+        const savedContent = localStorage.getItem('last-content');
+        const savedName = localStorage.getItem('last-filename');
+        const theme = localStorage.getItem('editor-theme');
+        if (savedContent) editor.value = savedContent;
+        if (savedName) updateTitle(savedName);
+        if (theme === 'frappe') {
+            document.body.classList.remove('theme-latte');
+            document.body.classList.add('theme-frappe');
+            document.querySelector('meta[name="theme-color"]').setAttribute('content', '#303446');
+        }
+        updateHighlighting();
+    };
+</script>
+</body>
+</html>
