@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" id="meta-theme" content="#eff1f5">
-    <title>Editor</title>
+    <title>Editor with Preview</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
@@ -17,7 +17,7 @@
             --crust: #ccd0da; --mantle: #e6e9ef; --line-bg: #e6e9ef;
             --token-comment: #9ca0b0; --token-selector: #e64553;
             --token-string: #40a02b; --token-keyword: #8839ef; --token-attr: #fe640b;
-            --tab-color: #bcc0cc;
+            --tab-color: #bcc0cc; --preview-bg: #ffffff;
         }
 
         .theme-frappe {
@@ -25,24 +25,35 @@
             --crust: #232634; --mantle: #292c3c; --line-bg: #292c3c;
             --token-comment: #838ba7; --token-selector: #e78284;
             --token-string: #a6d189; --token-keyword: #ca9ee6; --token-attr: #ef9f76;
-            --tab-color: #414559;
+            --tab-color: #414559; --preview-bg: #ffffff;
         }
 
         * { box-sizing: border-box; }
         body, html { margin: 0; padding: 0; background-color: var(--base); height: 100%; width: 100%; overflow: hidden; transition: background-color 0.2s; font-family: "Courier New", Courier, monospace; }
-        body.pulse { background-color: var(--mantle); }
         
-        #container { position: relative; display: flex; height: 100vh; padding-top: 50px; }
+        #container { position: relative; display: flex; height: 100vh; padding-top: 40px; }
 
         #gutter {
-            width: 60px; height: 100%; background: var(--line-bg);
-            color: var(--token-comment); text-align: right; padding: 20px 10px 0 0;
-            font-size: inherit; line-height: 1.7; user-select: none; overflow: hidden; flex-shrink: 0;
+            width: 50px; height: 100%; background: var(--line-bg);
+            color: var(--token-comment); text-align: right; padding-right: 10px;
+            padding-top: 20px; font-size: 14px; line-height: 1.7;
+            user-select: none; overflow: hidden; flex-shrink: 0;
         }
 
         .hide-lines #gutter { display: none; }
 
-        #editor-wrapper { position: relative; flex-grow: 1; height: 100%; overflow: hidden; }
+        #editor-wrapper { position: relative; flex: 1; height: 100%; overflow: hidden; }
+
+        /* Preview Pane Styling */
+        #preview-pane { 
+            flex: 1; 
+            height: 100%; 
+            border: none; 
+            background: var(--preview-bg); 
+            display: none; /* Hidden by default */
+        }
+
+        .show-preview #preview-pane { display: block; border-left: 2px solid var(--crust); }
 
         #editor, #highlight-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -54,20 +65,17 @@
         #editor { color: transparent; caret-color: var(--text); z-index: 2; resize: none; }
         #highlight-layer { z-index: 1; pointer-events: none; color: var(--text); }
 
-        .tab-symbol { color: var(--tab-color); position: absolute; pointer-events: none; opacity: 0.6; }
+        .tab-symbol { color: var(--tab-color); position: absolute; pointer-events: none; }
 
         #filename-display {
-            position: fixed; top: 15px; left: 20px; font-size: 0.8rem; 
+            position: fixed; top: 10px; left: 15px; font-size: 0.75rem; 
             color: var(--text); opacity: 0.5; z-index: 10;
         }
 
-        /* Prism Tokens */
         .token.comment { color: var(--token-comment); font-style: italic; }
         .token.string { color: var(--token-string); }
         .token.keyword { color: var(--token-keyword); font-weight: bold; }
         .token.function { color: var(--lavender); }
-        .token.selector, .token.tag { color: var(--token-selector); }
-        .token.attr-name { color: var(--token-attr); }
     </style>
 </head>
 <body class="theme-latte">
@@ -78,33 +86,34 @@
     <div id="gutter">1</div>
     <div id="editor-wrapper">
         <pre id="highlight-layer" aria-hidden="true"><code id="highlight-content" class="language-javascript"></code></pre>
-        <textarea id="editor" spellcheck="false" autocomplete="off" placeholder="..."></textarea>
+        <textarea id="editor" spellcheck="false" autocomplete="off" placeholder="Start typing HTML..."></textarea>
     </div>
+    <iframe id="preview-pane"></iframe>
 </div>
 
 <script>
-    const editor = document.getElementById('editor');
+const editor = document.getElementById('editor');
     const highlightContent = document.getElementById('highlight-content');
     const gutter = document.getElementById('gutter');
     const display = document.getElementById('filename-display');
     const metaTheme = document.getElementById('meta-theme');
-    
-    let fileHandle = null;
-    let isModified = false;
+    const previewPane = document.getElementById('preview-pane');
+
+    let debounceTimer; // Variable to hold the timer
 
     let state = {
         theme: localStorage.getItem('theme') || 'latte',
         showLines: localStorage.getItem('showLines') !== 'false',
-        fontSize: parseInt(localStorage.getItem('fontSize')) || 18,
-        filename: 'untitled'
+        showPreview: localStorage.getItem('showPreview') === 'true',
+        filename: 'index.html'
     };
 
     const updateUI = () => {
-        document.body.className = `theme-${state.theme} ${state.showLines ? '' : 'hide-lines'}`;
+        document.body.className = `theme-${state.theme} ${state.showLines ? '' : 'hide-lines'} ${state.showPreview ? 'show-preview' : ''}`;
         metaTheme.setAttribute('content', state.theme === 'latte' ? '#eff1f5' : '#303446');
-        document.body.style.fontSize = `${state.fontSize}px`;
-        display.innerText = state.filename + (isModified ? ' •' : '');
-        document.title = state.filename;
+        display.innerText = state.filename;
+        // Immediate update on UI toggle to feel responsive
+        renderPreview(); 
     };
 
     const updateLines = () => {
@@ -114,83 +123,59 @@
         gutter.innerHTML = lineNumbers;
     };
 
+    // The core rendering logic
+    const renderPreview = () => {
+        if (!state.showPreview) return;
+        const doc = previewPane.contentDocument || previewPane.contentWindow.document;
+        doc.open();
+        doc.write(editor.value);
+        doc.close();
+    };
+
+    // The Debounce Wrapper
+    const debouncedPreview = () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            renderPreview();
+        }, 300); // 300ms delay
+    };
+
     const updateHighlighting = () => {
         let text = editor.value;
         let highlighted = text
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
-            .replace(/\t/g, '<span class="tab-symbol">»   </span>\t');
+            .replace(/\t/g, '<span class="tab-symbol">»    </span>\t');
 
         highlightContent.innerHTML = highlighted;
         Prism.highlightElement(highlightContent);
         updateLines();
     };
 
-    async function saveFile() {
-        try {
-            if (!fileHandle) fileHandle = await window.showSaveFilePicker();
-            const writable = await fileHandle.createWritable();
-            await writable.write(editor.value);
-            await writable.close();
-            const file = await fileHandle.getFile();
-            state.filename = file.name;
-            isModified = false;
-            updateUI();
-            document.body.classList.add('pulse');
-            setTimeout(() => document.body.classList.remove('pulse'), 150);
-        } catch (e) { fileHandle = null; }
-    }
-
-    async function openFile() {
-        try {
-            [fileHandle] = await window.showOpenFilePicker();
-            const file = await fileHandle.getFile();
-            editor.value = await file.text();
-            state.filename = file.name;
-            isModified = false;
-            updateUI();
-            updateHighlighting();
-        } catch (e) {}
-    }
-
-    const handleShortcuts = (e) => {
+    const handleKeydown = (e) => {
         const isMod = e.ctrlKey || e.metaKey;
 
-        // Theme: Ctrl + B
-        if (isMod && e.code === 'KeyB') {
+        if (isMod && e.key.toLowerCase() === 'p') {
+            e.preventDefault();
+            state.showPreview = !state.showPreview;
+            localStorage.setItem('showPreview', state.showPreview);
+            updateUI();
+        }
+
+        if (isMod && e.key.toLowerCase() === 'b') {
             e.preventDefault();
             state.theme = state.theme === 'latte' ? 'frappe' : 'latte';
             localStorage.setItem('theme', state.theme);
             updateUI();
         }
 
-        // Lines: Ctrl + L
-        if (isMod && e.code === 'KeyL') {
+        if (isMod && e.key.toLowerCase() === 'l') {
             e.preventDefault();
             state.showLines = !state.showLines;
             localStorage.setItem('showLines', state.showLines);
             updateUI();
         }
 
-        // Zoom: Ctrl + / Ctrl -
-        if (isMod && (e.key === '=' || e.key === '+')) {
-            e.preventDefault();
-            state.fontSize += 1;
-            localStorage.setItem('fontSize', state.fontSize);
-            updateUI();
-        }
-        if (isMod && e.key === '-') {
-            e.preventDefault();
-            state.fontSize = Math.max(8, state.fontSize - 1);
-            localStorage.setItem('fontSize', state.fontSize);
-            updateUI();
-        }
-
-        // File: Ctrl + S / Ctrl + O
-        if (isMod && e.code === 'KeyS') { e.preventDefault(); saveFile(); }
-        if (isMod && e.code === 'KeyO') { e.preventDefault(); openFile(); }
-
-        // Tab Handling
         if (e.key === 'Tab') {
             e.preventDefault();
             const start = editor.selectionStart;
@@ -198,12 +183,13 @@
             editor.value = editor.value.substring(0, start) + "\t" + editor.value.substring(end);
             editor.selectionStart = editor.selectionEnd = start + 1;
             updateHighlighting();
+            debouncedPreview(); // Use debounce here too
         }
     };
 
     editor.addEventListener('input', () => {
         updateHighlighting();
-        if (!isModified) { isModified = true; updateUI(); }
+        debouncedPreview(); // Trigger the delay
         localStorage.setItem('last-content', editor.value);
     });
 
@@ -213,13 +199,13 @@
         layer.scrollLeft = editor.scrollLeft;
     });
 
-    window.addEventListener('keydown', handleShortcuts);
+    window.addEventListener('keydown', handleKeydown);
     
     window.onload = () => {
+        editor.value = localStorage.getItem('last-content') || '<h1>Hello</h1>';
         updateUI();
-        editor.value = localStorage.getItem('last-content') || '';
         updateHighlighting();
-    };
+    };`
 </script>
 </body>
 </html>
