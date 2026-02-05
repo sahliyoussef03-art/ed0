@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#eff1f5">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" id="meta-theme" content="#eff1f5">
     <title>Editor</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
@@ -16,6 +15,7 @@
         .theme-latte {
             --base: #eff1f5; --text: #4c4f69; --lavender: #7287fd;
             --crust: #dce0e8; --mantle: #e6e9ef;
+            --scroll-thumb: #ccd0da;
             --token-comment: #9ca0b0; --token-selector: #e64553;
             --token-string: #40a02b; --token-keyword: #8839ef;
             --token-attr: #fe640b;
@@ -24,20 +24,21 @@
         .theme-frappe {
             --base: #303446; --text: #c6d0f5; --lavender: #babbf1;
             --crust: #232634; --mantle: #292c3c;
+            --scroll-thumb: #51576d;
             --token-comment: #838ba7; --token-selector: #e78284;
             --token-string: #a6d189; --token-keyword: #ca9ee6;
             --token-attr: #ef9f76;
         }
 
         * { box-sizing: border-box; }
-        body, html { margin: 0; padding: 0; background-color: var(--base); height: 100%; width: 100%; overflow: hidden; transition: background-color 0.25s ease; }
+        body, html { margin: 0; padding: 0; background-color: var(--base); height: 100%; width: 100%; overflow: hidden; transition: background-color 0.2s; }
         body.pulse { background-color: var(--mantle); }
 
         #filename-display {
             position: fixed; top: 15px; left: 20px;
             font-family: "Courier New", Courier, serif;
             font-size: 0.8rem; color: var(--text);
-            opacity: 0.3; z-index: 10; pointer-events: none;
+            opacity: 0.4; z-index: 10; pointer-events: none;
         }
 
         #container { position: relative; width: 100%; height: 100%; padding: 60px 50px 50px 50px; }
@@ -46,13 +47,28 @@
             position: absolute; top: 60px; left: 50px;
             width: calc(100% - 100px); height: calc(100% - 110px);
             margin: 0; font-family: "Courier New", Courier, monospace;
-            font-size: 1.15rem; line-height: 1.7; tab-size: 4; 
+            line-height: 1.7; tab-size: 4; 
             white-space: pre; word-wrap: break-word; overflow: auto; border: none; outline: none;
         }
 
+        /* --- Ghost Scrollbars --- */
         #editor::-webkit-scrollbar { width: 4px; height: 4px; }
-        #editor::-webkit-scrollbar-thumb { background: var(--crust); border-radius: 10px; }
-        #editor { scrollbar-width: thin; scrollbar-color: var(--crust) transparent; }
+        #editor::-webkit-scrollbar-thumb { 
+            background: var(--scroll-thumb); 
+            border-radius: 10px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        /* Show when scrolling (toggled via JS) or hovering */
+        #editor.scrolling::-webkit-scrollbar-thumb,
+        #editor:hover::-webkit-scrollbar-thumb { 
+            background: var(--scroll-thumb);
+        }
+
+        /* Firefox */
+        #editor { scrollbar-width: none; transition: scrollbar-color 0.3s; }
+        #editor.scrolling { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
 
         #editor { background: transparent; color: transparent; caret-color: var(--text); z-index: 2; resize: none; }
         #highlight-layer { z-index: 1; pointer-events: none; color: var(--text); }
@@ -80,13 +96,42 @@
     const highlightContent = document.getElementById('highlight-content');
     const display = document.getElementById('filename-display');
     const layer = document.getElementById('highlight-layer');
+    const metaTheme = document.getElementById('meta-theme');
     let fileHandle = null;
+    let isModified = false;
+    let scrollTimeout;
 
-    const updateTitle = (name) => {
-        const cleanName = name || 'untitled';
-        display.innerText = cleanName;
-        document.title = cleanName;
-        localStorage.setItem('last-filename', cleanName);
+    let state = {
+        theme: 'latte',
+        fontSize: 18,
+        scrollTop: 0,
+        scrollLeft: 0,
+        filename: 'untitled'
+    };
+
+    const setModified = (mod) => {
+        isModified = mod;
+        display.innerText = state.filename + (mod ? ' •' : '');
+    };
+
+    const saveState = () => {
+        state.scrollTop = editor.scrollTop;
+        state.scrollLeft = editor.scrollLeft;
+        localStorage.setItem('editor-settings', JSON.stringify(state));
+    };
+
+    const applyState = () => {
+        const saved = localStorage.getItem('editor-settings');
+        if (saved) state = { ...state, ...JSON.parse(saved) };
+        document.body.className = `theme-${state.theme}`;
+        metaTheme.content = state.theme === 'latte' ? '#eff1f5' : '#303446';
+        editor.style.fontSize = layer.style.fontSize = `${state.fontSize}px`;
+        setModified(isModified);
+        document.title = state.filename;
+        setTimeout(() => {
+            editor.scrollTop = layer.scrollTop = state.scrollTop;
+            editor.scrollLeft = layer.scrollLeft = state.scrollLeft;
+        }, 10);
     };
 
     const updateHighlighting = () => {
@@ -96,8 +141,23 @@
         Prism.highlightElement(highlightContent);
     };
 
-    editor.onscroll = () => { layer.scrollTop = editor.scrollTop; layer.scrollLeft = editor.scrollLeft; };
-    editor.oninput = () => { updateHighlighting(); localStorage.setItem('last-content', editor.value); };
+    // Scroll Logic with "Ghost" visibility
+    editor.onscroll = () => {
+        layer.scrollTop = editor.scrollTop;
+        layer.scrollLeft = editor.scrollLeft;
+        
+        editor.classList.add('scrolling');
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(() => editor.classList.remove('scrolling'), 1000);
+        
+        saveState();
+    };
+
+    editor.oninput = () => {
+        updateHighlighting();
+        if (!isModified) setModified(true);
+        localStorage.setItem('last-content', editor.value);
+    };
 
     async function saveFile() {
         try {
@@ -106,8 +166,10 @@
             await writable.write(editor.value);
             await writable.close();
             const file = await fileHandle.getFile();
-            updateTitle(file.name);
-            updateHighlighting();
+            state.filename = file.name;
+            setModified(false);
+            applyState();
+            saveState();
             document.body.classList.add('pulse');
             setTimeout(() => document.body.classList.remove('pulse'), 150);
         } catch (e) { fileHandle = null; }
@@ -118,41 +180,51 @@
             [fileHandle] = await window.showOpenFilePicker();
             const file = await fileHandle.getFile();
             editor.value = await file.text();
-            updateTitle(file.name);
+            state.filename = file.name;
+            setModified(false);
+            applyState();
             updateHighlighting();
+            saveState();
         } catch (e) {}
     }
 
     window.onkeydown = (e) => {
         const isMod = e.ctrlKey || e.metaKey;
+        if (isMod && (e.key === '=' || e.key === '+')) {
+            e.preventDefault();
+            state.fontSize += 1;
+            applyState();
+            saveState();
+        }
+        if (isMod && e.key === '-') {
+            e.preventDefault();
+            state.fontSize = Math.max(8, state.fontSize - 1);
+            applyState();
+            saveState();
+        }
         if (e.key === 'Tab') {
             e.preventDefault();
             editor.setRangeText('    ', editor.selectionStart, editor.selectionEnd, 'end');
             updateHighlighting();
+            if (!isModified) setModified(true);
         }
         if (isMod && e.key.toLowerCase() === 's') { e.preventDefault(); saveFile(); }
         if (isMod && e.key.toLowerCase() === 'o') { e.preventDefault(); openFile(); }
-        if (isMod && e.key.toLowerCase() === 'b') { e.preventDefault();
-            const isLatte = document.body.classList.contains('theme-latte');
-            document.body.classList.toggle('theme-latte', !isLatte);
-            document.body.classList.toggle('theme-frappe', isLatte);
-            localStorage.setItem('editor-theme', isLatte ? 'frappe' : 'latte');
-            document.querySelector('meta[name="theme-color"]').setAttribute('content', isLatte ? '#303446' : '#eff1f5');
+        if (isMod && e.key.toLowerCase() === 'b') { 
+            e.preventDefault();
+            state.theme = state.theme === 'latte' ? 'frappe' : 'latte';
+            applyState();
+            saveState();
         }
     };
 
     window.onload = () => {
+        applyState();
         const savedContent = localStorage.getItem('last-content');
-        const savedName = localStorage.getItem('last-filename');
-        const theme = localStorage.getItem('editor-theme');
-        if (savedContent) editor.value = savedContent;
-        if (savedName) updateTitle(savedName);
-        if (theme === 'frappe') {
-            document.body.classList.remove('theme-latte');
-            document.body.classList.add('theme-frappe');
-            document.querySelector('meta[name="theme-color"]').setAttribute('content', '#303446');
+        if (savedContent) {
+            editor.value = savedContent;
+            updateHighlighting();
         }
-        updateHighlighting();
     };
 </script>
 </body>
