@@ -4,56 +4,54 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" id="meta-theme" content="#eff1f5">
-    <title>Editor with Preview</title>
+    <title>Editor</title>
     
+    <!-- Prism Syntax Highlighting -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
     
     <style>
+        /* Catppuccin Latte (Light) */
         .theme-latte {
             --base: #eff1f5; --text: #4c4f69; --lavender: #7287fd;
             --crust: #ccd0da; --mantle: #e6e9ef; --line-bg: #e6e9ef;
             --token-comment: #9ca0b0; --token-selector: #e64553;
             --token-string: #40a02b; --token-keyword: #8839ef; --token-attr: #fe640b;
-            --tab-color: #bcc0cc; --preview-bg: #ffffff;
+            --tab-color: #bcc0cc; --overlay: rgba(0,0,0,0.1); --modal-bg: #ffffff;
         }
 
+        /* Catppuccin Frappe (Dark) */
         .theme-frappe {
             --base: #303446; --text: #c6d0f5; --lavender: #babbf1;
             --crust: #232634; --mantle: #292c3c; --line-bg: #292c3c;
             --token-comment: #838ba7; --token-selector: #e78284;
             --token-string: #a6d189; --token-keyword: #ca9ee6; --token-attr: #ef9f76;
-            --tab-color: #414559; --preview-bg: #ffffff;
+            --tab-color: #414559; --overlay: rgba(0,0,0,0.4); --modal-bg: #232634;
         }
 
         * { box-sizing: border-box; }
-        body, html { margin: 0; padding: 0; background-color: var(--base); height: 100%; width: 100%; overflow: hidden; transition: background-color 0.2s; font-family: "Courier New", Courier, monospace; }
+        body, html { 
+            margin: 0; padding: 0; background-color: var(--base); 
+            height: 100%; width: 100%; overflow: hidden; 
+            transition: background-color 0.2s; 
+            font-family: "Courier New", Courier, monospace; 
+        }
         
-        #container { position: relative; display: flex; height: 100vh; padding-top: 40px; }
+        body.pulse { background-color: var(--mantle); }
+        
+        #container { position: relative; display: flex; height: 100vh; padding-top: 50px; }
 
         #gutter {
-            width: 50px; height: 100%; background: var(--line-bg);
-            color: var(--token-comment); text-align: right; padding-right: 10px;
-            padding-top: 20px; font-size: 14px; line-height: 1.7;
-            user-select: none; overflow: hidden; flex-shrink: 0;
+            width: 60px; height: 100%; background: var(--line-bg);
+            color: var(--token-comment); text-align: right; padding: 20px 10px 0 0;
+            font-size: inherit; line-height: 1.7; user-select: none; overflow: hidden; flex-shrink: 0;
         }
 
         .hide-lines #gutter { display: none; }
 
-        #editor-wrapper { position: relative; flex: 1; height: 100%; overflow: hidden; }
-
-        /* Preview Pane Styling */
-        #preview-pane { 
-            flex: 1; 
-            height: 100%; 
-            border: none; 
-            background: var(--preview-bg); 
-            display: none; /* Hidden by default */
-        }
-
-        .show-preview #preview-pane { display: block; border-left: 2px solid var(--crust); }
+        #editor-wrapper { position: relative; flex-grow: 1; height: 100%; overflow: hidden; }
 
         #editor, #highlight-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -65,17 +63,39 @@
         #editor { color: transparent; caret-color: var(--text); z-index: 2; resize: none; }
         #highlight-layer { z-index: 1; pointer-events: none; color: var(--text); }
 
-        .tab-symbol { color: var(--tab-color); position: absolute; pointer-events: none; }
+        .tab-symbol { color: var(--tab-color); position: absolute; pointer-events: none; opacity: 0.6; }
 
         #filename-display {
-            position: fixed; top: 10px; left: 15px; font-size: 0.75rem; 
+            position: fixed; top: 15px; left: 20px; font-size: 0.8rem; 
             color: var(--text); opacity: 0.5; z-index: 10;
         }
 
+        /* Custom Modal Styling */
+        #modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--overlay); display: none; align-items: center;
+            justify-content: center; z-index: 100;
+        }
+        #modal {
+            background: var(--modal-bg); color: var(--text);
+            padding: 25px; border-radius: 12px; max-width: 400px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2); text-align: center;
+        }
+        .modal-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
+        .btn {
+            padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer;
+            font-family: inherit; font-size: 0.9rem;
+        }
+        .btn-primary { background: var(--lavender); color: white; }
+        .btn-secondary { background: var(--mantle); color: var(--text); }
+
+        /* Prism Tokens */
         .token.comment { color: var(--token-comment); font-style: italic; }
         .token.string { color: var(--token-string); }
         .token.keyword { color: var(--token-keyword); font-weight: bold; }
         .token.function { color: var(--lavender); }
+        .token.selector, .token.tag { color: var(--token-selector); }
+        .token.attr-name { color: var(--token-attr); }
     </style>
 </head>
 <body class="theme-latte">
@@ -86,34 +106,46 @@
     <div id="gutter">1</div>
     <div id="editor-wrapper">
         <pre id="highlight-layer" aria-hidden="true"><code id="highlight-content" class="language-javascript"></code></pre>
-        <textarea id="editor" spellcheck="false" autocomplete="off" placeholder="Start typing HTML..."></textarea>
+        <textarea id="editor" spellcheck="false" autocomplete="off" placeholder="Start typing..."></textarea>
     </div>
-    <iframe id="preview-pane"></iframe>
+</div>
+
+<!-- Unsaved Changes Modal -->
+<div id="modal-overlay">
+    <div id="modal">
+        <h3 style="margin-top:0">Unsaved Changes</h3>
+        <p>You have unsaved work. Are you sure you want to create a new file and discard current progress?</p>
+        <div class="modal-buttons">
+            <button class="btn btn-primary" onclick="confirmNewFile()">Discard & New</button>
+            <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        </div>
+    </div>
 </div>
 
 <script>
-const editor = document.getElementById('editor');
+    const editor = document.getElementById('editor');
     const highlightContent = document.getElementById('highlight-content');
     const gutter = document.getElementById('gutter');
     const display = document.getElementById('filename-display');
     const metaTheme = document.getElementById('meta-theme');
-    const previewPane = document.getElementById('preview-pane');
-
-    let debounceTimer; // Variable to hold the timer
+    const modalOverlay = document.getElementById('modal-overlay');
+    
+    let fileHandle = null;
+    let isModified = false;
 
     let state = {
         theme: localStorage.getItem('theme') || 'latte',
         showLines: localStorage.getItem('showLines') !== 'false',
-        showPreview: localStorage.getItem('showPreview') === 'true',
-        filename: 'index.html'
+        fontSize: parseInt(localStorage.getItem('fontSize')) || 18,
+        filename: 'untitled'
     };
 
     const updateUI = () => {
-        document.body.className = `theme-${state.theme} ${state.showLines ? '' : 'hide-lines'} ${state.showPreview ? 'show-preview' : ''}`;
+        document.body.className = `theme-${state.theme} ${state.showLines ? '' : 'hide-lines'}`;
         metaTheme.setAttribute('content', state.theme === 'latte' ? '#eff1f5' : '#303446');
-        display.innerText = state.filename;
-        // Immediate update on UI toggle to feel responsive
-        renderPreview(); 
+        document.body.style.fontSize = `${state.fontSize}px`;
+        display.innerText = state.filename + (isModified ? ' •' : '');
+        document.title = state.filename;
     };
 
     const updateLines = () => {
@@ -123,59 +155,116 @@ const editor = document.getElementById('editor');
         gutter.innerHTML = lineNumbers;
     };
 
-    // The core rendering logic
-    const renderPreview = () => {
-        if (!state.showPreview) return;
-        const doc = previewPane.contentDocument || previewPane.contentWindow.document;
-        doc.open();
-        doc.write(editor.value);
-        doc.close();
-    };
-
-    // The Debounce Wrapper
-    const debouncedPreview = () => {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-            renderPreview();
-        }, 300); // 300ms delay
-    };
-
     const updateHighlighting = () => {
         let text = editor.value;
         let highlighted = text
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
-            .replace(/\t/g, '<span class="tab-symbol">»    </span>\t');
+            .replace(/\t/g, '<span class="tab-symbol">»   </span>\t');
 
         highlightContent.innerHTML = highlighted;
         Prism.highlightElement(highlightContent);
         updateLines();
     };
 
-    const handleKeydown = (e) => {
+    // --- NEW FILE LOGIC ---
+    function triggerNewFile() {
+        if (isModified) {
+            modalOverlay.style.display = 'flex';
+        } else {
+            confirmNewFile();
+        }
+    }
+
+    function closeModal() {
+        modalOverlay.style.display = 'none';
+    }
+
+    function confirmNewFile() {
+        closeModal();
+        fileHandle = null;
+        editor.value = '';
+        state.filename = 'untitled';
+        isModified = false;
+        localStorage.removeItem('last-content');
+        updateUI();
+        updateHighlighting();
+        editor.focus();
+    }
+
+    async function saveFile() {
+        try {
+            if (!fileHandle) fileHandle = await window.showSaveFilePicker();
+            const writable = await fileHandle.createWritable();
+            await writable.write(editor.value);
+            await writable.close();
+            const file = await fileHandle.getFile();
+            state.filename = file.name;
+            isModified = false;
+            updateUI();
+            document.body.classList.add('pulse');
+            setTimeout(() => document.body.classList.remove('pulse'), 150);
+        } catch (e) { 
+            // Handle cancel or errors
+        }
+    }
+
+    async function openFile() {
+        try {
+            [fileHandle] = await window.showOpenFilePicker();
+            const file = await fileHandle.getFile();
+            editor.value = await file.text();
+            state.filename = file.name;
+            isModified = false;
+            updateUI();
+            updateHighlighting();
+        } catch (e) {}
+    }
+
+    const handleShortcuts = (e) => {
         const isMod = e.ctrlKey || e.metaKey;
 
-        if (isMod && e.key.toLowerCase() === 'p') {
+        // New File: Ctrl + M
+        if (isMod && e.code === 'KeyM') {
             e.preventDefault();
-            state.showPreview = !state.showPreview;
-            localStorage.setItem('showPreview', state.showPreview);
-            updateUI();
+            triggerNewFile();
         }
 
-        if (isMod && e.key.toLowerCase() === 'b') {
+        // Theme: Ctrl + B
+        if (isMod && e.code === 'KeyB') {
             e.preventDefault();
             state.theme = state.theme === 'latte' ? 'frappe' : 'latte';
             localStorage.setItem('theme', state.theme);
             updateUI();
         }
 
-        if (isMod && e.key.toLowerCase() === 'l') {
+        // Lines: Ctrl + L
+        if (isMod && e.code === 'KeyL') {
             e.preventDefault();
             state.showLines = !state.showLines;
             localStorage.setItem('showLines', state.showLines);
             updateUI();
         }
 
+        // Zoom: Ctrl + / Ctrl -
+        if (isMod && (e.key === '=' || e.key === '+')) {
+            e.preventDefault();
+            state.fontSize += 1;
+            localStorage.setItem('fontSize', state.fontSize);
+            updateUI();
+        }
+        if (isMod && e.key === '-') {
+            e.preventDefault();
+            state.fontSize = Math.max(8, state.fontSize - 1);
+            localStorage.setItem('fontSize', state.fontSize);
+            updateUI();
+        }
+
+        // File: Ctrl + S / Ctrl + O
+        if (isMod && e.code === 'KeyS') { e.preventDefault(); saveFile(); }
+        if (isMod && e.code === 'KeyO') { e.preventDefault(); openFile(); }
+
+        // Tab Handling
         if (e.key === 'Tab') {
             e.preventDefault();
             const start = editor.selectionStart;
@@ -183,13 +272,12 @@ const editor = document.getElementById('editor');
             editor.value = editor.value.substring(0, start) + "\t" + editor.value.substring(end);
             editor.selectionStart = editor.selectionEnd = start + 1;
             updateHighlighting();
-            debouncedPreview(); // Use debounce here too
         }
     };
 
     editor.addEventListener('input', () => {
         updateHighlighting();
-        debouncedPreview(); // Trigger the delay
+        if (!isModified) { isModified = true; updateUI(); }
         localStorage.setItem('last-content', editor.value);
     });
 
@@ -199,13 +287,13 @@ const editor = document.getElementById('editor');
         layer.scrollLeft = editor.scrollLeft;
     });
 
-    window.addEventListener('keydown', handleKeydown);
+    window.addEventListener('keydown', handleShortcuts);
     
     window.onload = () => {
-        editor.value = localStorage.getItem('last-content') || '<h1>Hello</h1>';
         updateUI();
+        editor.value = localStorage.getItem('last-content') || '';
         updateHighlighting();
-    };`
+    };
 </script>
 </body>
 </html>
