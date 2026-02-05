@@ -12,22 +12,19 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
     
     <style>
+        /* Themes */
         .theme-latte {
             --base: #eff1f5; --text: #4c4f69; --lavender: #7287fd;
-            --crust: #dce0e8; --mantle: #e6e9ef;
-            --scroll-thumb: #ccd0da;
+            --crust: #ccd0da; --mantle: #e6e9ef; --scroll-thumb: #ccd0da;
             --token-comment: #9ca0b0; --token-selector: #e64553;
-            --token-string: #40a02b; --token-keyword: #8839ef;
-            --token-attr: #fe640b;
+            --token-string: #40a02b; --token-keyword: #8839ef; --token-attr: #fe640b;
         }
 
         .theme-frappe {
             --base: #303446; --text: #c6d0f5; --lavender: #babbf1;
-            --crust: #232634; --mantle: #292c3c;
-            --scroll-thumb: #51576d;
+            --crust: #232634; --mantle: #292c3c; --scroll-thumb: #51576d;
             --token-comment: #838ba7; --token-selector: #e78284;
-            --token-string: #a6d189; --token-keyword: #ca9ee6;
-            --token-attr: #ef9f76;
+            --token-string: #a6d189; --token-keyword: #ca9ee6; --token-attr: #ef9f76;
         }
 
         * { box-sizing: border-box; }
@@ -51,26 +48,21 @@
             white-space: pre; word-wrap: break-word; overflow: auto; border: none; outline: none;
         }
 
-        /* --- Ghost Scrollbars --- */
+        /* Ghost Scrollbars */
         #editor::-webkit-scrollbar { width: 4px; height: 4px; }
         #editor::-webkit-scrollbar-thumb { 
             background: var(--scroll-thumb); 
             border-radius: 10px;
-            opacity: 0;
-            transition: opacity 0.3s;
+            visibility: hidden; /* Standard "hide" */
         }
         
-        /* Show when scrolling (toggled via JS) or hovering */
         #editor.scrolling::-webkit-scrollbar-thumb,
         #editor:hover::-webkit-scrollbar-thumb { 
-            background: var(--scroll-thumb);
+            visibility: visible;
         }
 
-        /* Firefox */
-        #editor { scrollbar-width: none; transition: scrollbar-color 0.3s; }
+        #editor { background: transparent; color: transparent; caret-color: var(--text); z-index: 2; resize: none; scrollbar-width: none; }
         #editor.scrolling { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
-
-        #editor { background: transparent; color: transparent; caret-color: var(--text); z-index: 2; resize: none; }
         #highlight-layer { z-index: 1; pointer-events: none; color: var(--text); }
 
         .token.comment { color: var(--token-comment); font-style: italic; }
@@ -123,15 +115,18 @@
     const applyState = () => {
         const saved = localStorage.getItem('editor-settings');
         if (saved) state = { ...state, ...JSON.parse(saved) };
+        
         document.body.className = `theme-${state.theme}`;
-        metaTheme.content = state.theme === 'latte' ? '#eff1f5' : '#303446';
+        metaTheme.setAttribute('content', state.theme === 'latte' ? '#eff1f5' : '#303446');
+        
         editor.style.fontSize = layer.style.fontSize = `${state.fontSize}px`;
         setModified(isModified);
         document.title = state.filename;
+        
         setTimeout(() => {
             editor.scrollTop = layer.scrollTop = state.scrollTop;
             editor.scrollLeft = layer.scrollLeft = state.scrollLeft;
-        }, 10);
+        }, 20);
     };
 
     const updateHighlighting = () => {
@@ -141,15 +136,12 @@
         Prism.highlightElement(highlightContent);
     };
 
-    // Scroll Logic with "Ghost" visibility
     editor.onscroll = () => {
         layer.scrollTop = editor.scrollTop;
         layer.scrollLeft = editor.scrollLeft;
-        
         editor.classList.add('scrolling');
         clearTimeout(scrollTimeout);
         scrollTimeout = setTimeout(() => editor.classList.remove('scrolling'), 1000);
-        
         saveState();
     };
 
@@ -190,6 +182,16 @@
 
     window.onkeydown = (e) => {
         const isMod = e.ctrlKey || e.metaKey;
+        
+        // Ctrl + I (Invert Theme)
+        if (isMod && e.key.toLowerCase() === 'i') { 
+            e.preventDefault();
+            state.theme = (state.theme === 'latte') ? 'frappe' : 'latte';
+            applyState();
+            saveState();
+        }
+        
+        // Zoom
         if (isMod && (e.key === '=' || e.key === '+')) {
             e.preventDefault();
             state.fontSize += 1;
@@ -202,20 +204,16 @@
             applyState();
             saveState();
         }
+        
         if (e.key === 'Tab') {
             e.preventDefault();
             editor.setRangeText('    ', editor.selectionStart, editor.selectionEnd, 'end');
             updateHighlighting();
             if (!isModified) setModified(true);
         }
+        
         if (isMod && e.key.toLowerCase() === 's') { e.preventDefault(); saveFile(); }
         if (isMod && e.key.toLowerCase() === 'o') { e.preventDefault(); openFile(); }
-        if (isMod && e.key.toLowerCase() === 'b') { 
-            e.preventDefault();
-            state.theme = state.theme === 'latte' ? 'frappe' : 'latte';
-            applyState();
-            saveState();
-        }
     };
 
     window.onload = () => {
