@@ -4,13 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" id="meta-theme" content="#eff1f5">
-    <title>Editor</title>
+    <title>Web Editor</title>
     
     <!-- Prism Syntax Highlighting -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-pascal.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markdown.min.js"></script>
     
     <style>
         /* Catppuccin Latte (Light) */
@@ -20,6 +22,9 @@
             --token-comment: #9ca0b0; --token-selector: #e64553;
             --token-string: #40a02b; --token-keyword: #8839ef; --token-attr: #fe640b;
             --tab-color: #bcc0cc; --overlay: rgba(0,0,0,0.1); --modal-bg: #ffffff;
+            --preview-bg: #ffffff; --status-bg: #dce0e8;
+            --resizer-hover: #bcc0cc;
+            --selection: rgba(114, 135, 253, 0.3);
         }
 
         /* Catppuccin Frappe (Dark) */
@@ -29,6 +34,9 @@
             --token-comment: #838ba7; --token-selector: #e78284;
             --token-string: #a6d189; --token-keyword: #ca9ee6; --token-attr: #ef9f76;
             --tab-color: #414559; --overlay: rgba(0,0,0,0.4); --modal-bg: #232634;
+            --preview-bg: #ffffff; --status-bg: #232634;
+            --resizer-hover: #414559;
+            --selection: rgba(186, 187, 241, 0.3);
         }
 
         * { box-sizing: border-box; }
@@ -40,8 +48,149 @@
         }
         
         body.pulse { background-color: var(--mantle); }
+
+        header {
+            display: flex;
+            flex-direction: column;
+            background: var(--mantle);
+            border-bottom: 1px solid var(--crust);
+            z-index: 100;
+        }
+
+        #toolbar {
+            height: 35px;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            gap: 5px;
+            border-bottom: 1px solid var(--crust);
+            /* Removed overflow:hidden to allow menus to pop out */
+            transition: height 0.2s, border-bottom 0.2s;
+        }
+        .hide-toolbar #toolbar {
+            height: 0;
+            border-bottom: none;
+            overflow: hidden; /* Hide content only when collapsed */
+        }
+
+        #tab-bar {
+            height: 35px;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            gap: 5px;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+        #tab-bar::-webkit-scrollbar { display: none; }
+
+        #container { 
+            position: relative; 
+            display: flex; 
+            height: calc(100vh - 95px); 
+            width: 100%; 
+            transition: height 0.2s;
+        }
+        .hide-toolbar #container {
+            height: calc(100vh - 60px);
+        }
+
+        .buffer-tab {
+            padding: 4px 12px;
+            background: var(--crust);
+            color: var(--text);
+            font-size: 0.75rem;
+            border-radius: 4px 4px 0 0;
+            cursor: pointer;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            opacity: 0.7;
+            transition: all 0.2s;
+            height: 28px;
+            margin-top: 7px;
+        }
+        .buffer-tab.active {
+            background: var(--base);
+            opacity: 1;
+            border-bottom: 2px solid var(--lavender);
+        }
+        .buffer-close {
+            font-size: 1rem;
+            line-height: 1;
+            opacity: 0.5;
+        }
+        .buffer-close:hover { color: var(--token-selector); opacity: 1; }
+
+        .toolbar-btn {
+            height: 26px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--lavender);
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background 0.2s;
+            flex-shrink: 0;
+            padding: 0 10px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            user-select: none;
+            border: 1px solid transparent;
+        }
+        .toolbar-btn:hover {
+            background: var(--crust);
+            border-color: var(--crust);
+        }
+
+        #recents-container { position: relative; }
         
-        #container { position: relative; display: flex; height: 100vh; padding-top: 50px; }
+        #recents-menu {
+            position: absolute;
+            top: 30px;
+            left: 0;
+            background: var(--modal-bg);
+            border: 1px solid var(--crust);
+            border-radius: 6px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+            z-index: 200;
+            min-width: 200px;
+            display: none;
+            padding: 6px 0;
+        }
+        .recent-item {
+            padding: 8px 14px;
+            font-size: 0.75rem;
+            color: var(--text);
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .recent-item::before {
+            content: "";
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--lavender);
+            opacity: 0.5;
+        }
+        .recent-item:hover { background: var(--mantle); color: var(--lavender); }
+        .recent-empty { padding: 10px 14px; font-size: 0.75rem; color: var(--token-comment); font-style: italic; }
+
+        .recent-item.clear-all {
+            color: var(--token-selector);
+            font-weight: bold;
+            margin-top: 4px;
+            border-top: 1px solid var(--crust);
+        }
+        .recent-item.clear-all::before {
+            background: var(--token-selector);
+        }
 
         #gutter {
             width: 60px; height: 100%; background: var(--line-bg);
@@ -51,30 +200,89 @@
 
         .hide-lines #gutter { display: none; }
 
-        #editor-wrapper { position: relative; flex-grow: 1; height: 100%; overflow: hidden; }
+        #editor-wrapper { 
+            position: relative; 
+            width: 50%;
+            min-width: 100px;
+            height: 100%; 
+            overflow: hidden; 
+        }
+
+        #resizer {
+            width: 8px; height: 100%; background: var(--crust);
+            cursor: col-resize; display: none; transition: background 0.2s;
+            z-index: 30; flex-shrink: 0;
+        }
+        #resizer:hover, #resizer.dragging { background: var(--resizer-hover); }
+        .show-preview #resizer { display: block; }
 
         #editor, #highlight-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            padding: 20px; margin: 0; line-height: 1.7; tab-size: 4; 
-            white-space: pre; word-wrap: break-word; overflow: auto; border: none; outline: none;
+            padding: 20px; margin: 0; line-height: 1.7; 
+            tab-size: 4; -moz-tab-size: 4;
+            white-space: pre; 
+            overflow: auto; border: none; outline: none;
             background: transparent; font-size: inherit; font-family: inherit;
         }
 
-        #editor { color: transparent; caret-color: var(--text); z-index: 2; resize: none; }
-        #highlight-layer { z-index: 1; pointer-events: none; color: var(--text); }
-
-        .tab-symbol { color: var(--tab-color); position: absolute; pointer-events: none; opacity: 0.6; }
-
-        #filename-display {
-            position: fixed; top: 15px; left: 20px; font-size: 0.8rem; 
-            color: var(--text); opacity: 0.5; z-index: 10;
+        #editor::selection {
+            background: var(--selection);
+            color: transparent;
         }
 
-        /* Custom Modal Styling */
+        #editor { color: transparent; caret-color: var(--text); z-index: 2; resize: none; }
+        
+        #highlight-layer { 
+            z-index: 1; 
+            pointer-events: none; 
+            color: var(--text); 
+            scrollbar-width: none;
+        }
+        #highlight-layer::-webkit-scrollbar { display: none; }
+
+        #highlight-content {
+            padding: 0 !important;
+            margin: 0 !important;
+            background: transparent !important;
+            font-family: inherit !important;
+            font-size: inherit !important;
+            display: block;
+        }
+
+        #preview-wrapper {
+            flex: 1; height: 100%; background: var(--preview-bg);
+            display: none; overflow: hidden; min-width: 100px;
+        }
+        .show-preview #preview-wrapper { display: block; }
+        #preview-frame { width: 100%; height: 100%; border: none; background: white; }
+
+        .dragging iframe { pointer-events: none; }
+
+        #status-bar {
+            position: fixed; bottom: 0; left: 0; width: 100%; height: 25px;
+            background: var(--status-bg); color: var(--text); font-size: 0.7rem;
+            display: flex; align-items: center; padding: 0 10px; z-index: 20;
+            border-top: 1px solid var(--crust); justify-content: space-between;
+            letter-spacing: 0.02em;
+        }
+
+        .status-segment { display: flex; gap: 15px; align-items: center; }
+        .status-mode { font-weight: bold; color: var(--lavender); text-transform: uppercase; }
+        .status-clickable { cursor: pointer; }
+        .status-clickable:hover { color: var(--lavender); text-decoration: underline; }
+        .status-divider { opacity: 0.3; }
+
+        #status-message {
+            color: var(--lavender);
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
         #modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: var(--overlay); display: none; align-items: center;
-            justify-content: center; z-index: 100;
+            justify-content: center; z-index: 1000;
         }
         #modal {
             background: var(--modal-bg); color: var(--text);
@@ -89,7 +297,6 @@
         .btn-primary { background: var(--lavender); color: white; }
         .btn-secondary { background: var(--mantle); color: var(--text); }
 
-        /* Prism Tokens */
         .token.comment { color: var(--token-comment); font-style: italic; }
         .token.string { color: var(--token-string); }
         .token.keyword { color: var(--token-keyword); font-weight: bold; }
@@ -100,23 +307,71 @@
 </head>
 <body class="theme-latte">
 
-<div id="filename-display">untitled</div>
+<header id="app-header">
+    <div id="toolbar">
+        <div id="new-buffer-btn" class="toolbar-btn">NEW</div>
+        <div id="open-btn" class="toolbar-btn">OPEN</div>
+        <div id="save-btn" class="toolbar-btn">SAVE</div>
+        <div id="help-btn" class="toolbar-btn">HELP</div>
+        <div id="recents-container">
+            <div id="recents-btn" class="toolbar-btn">RECENTS</div>
+            <div id="recents-menu"></div>
+        </div>
+    </div>
+    <div id="tab-bar">
+        <!-- Tabs injected here -->
+    </div>
+</header>
 
 <div id="container">
     <div id="gutter">1</div>
     <div id="editor-wrapper">
-        <pre id="highlight-layer" aria-hidden="true"><code id="highlight-content" class="language-javascript"></code></pre>
+        <pre id="highlight-layer" aria-hidden="true"><code id="highlight-content"></code></pre>
         <textarea id="editor" spellcheck="false" autocomplete="off" placeholder="Start typing..."></textarea>
+    </div>
+    
+    <div id="resizer"></div>
+
+    <div id="preview-wrapper">
+        <iframe id="preview-frame"></iframe>
     </div>
 </div>
 
-<!-- Unsaved Changes Modal -->
+<div id="status-bar">
+    <div class="status-segment">
+        <span class="status-mode" id="status-mode">INSERT</span>
+        <span class="status-divider">|</span>
+        <span id="status-filename">help.txt</span>
+        <span id="status-lang" class="status-clickable" style="opacity: 0.7; font-size: 0.6rem;">markdown</span>
+        <span class="status-divider">|</span>
+        <span id="status-message"></span>
+    </div>
+    
+    <div class="status-segment" style="flex: 1; justify-content: center;">
+        <span id="status-stats">Words: 0 Chars: 0</span>
+    </div>
+
+    <div class="status-segment">
+        <span id="status-pos">L:1 C:1</span>
+        <span class="status-divider">|</span>
+        <span id="status-theme-toggle" class="status-clickable" onclick="toggleTheme()">Theme: Latte</span>
+        <span class="status-divider">|</span>
+        <span id="status-toolbar-toggle" class="status-clickable" onclick="toggleToolbar()">Toolbar: ON</span>
+        <span class="status-divider">|</span>
+        <span id="status-line-toggle" class="status-clickable" onclick="toggleLines()">Lines: ON</span>
+        <span class="status-divider">|</span>
+        <span id="status-zoom">18px</span>
+        <span class="status-divider">|</span>
+        <span>UTF-8</span>
+    </div>
+</div>
+
 <div id="modal-overlay">
     <div id="modal">
-        <h3 style="margin-top:0">Unsaved Changes</h3>
-        <p>You have unsaved work. Are you sure you want to create a new file and discard current progress?</p>
+        <h3 id="modal-title" style="margin-top:0">Unsaved Changes</h3>
+        <p id="modal-body">Discard changes and start a new file?</p>
         <div class="modal-buttons">
-            <button class="btn btn-primary" onclick="confirmNewFile()">Discard & New</button>
+            <button id="modal-confirm" class="btn btn-primary">Confirm</button>
             <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
         </div>
     </div>
@@ -124,29 +379,362 @@
 
 <script>
     const editor = document.getElementById('editor');
+    const editorWrapper = document.getElementById('editor-wrapper');
+    const resizer = document.getElementById('resizer');
+    const container = document.getElementById('container');
     const highlightContent = document.getElementById('highlight-content');
     const gutter = document.getElementById('gutter');
-    const display = document.getElementById('filename-display');
     const metaTheme = document.getElementById('meta-theme');
     const modalOverlay = document.getElementById('modal-overlay');
+    const previewFrame = document.getElementById('preview-frame');
+    const statusPos = document.getElementById('status-pos');
+    const statusFilename = document.getElementById('status-filename');
+    const statusLang = document.getElementById('status-lang');
+    const statusStats = document.getElementById('status-stats');
+    const statusMessage = document.getElementById('status-message');
+    const statusThemeToggle = document.getElementById('status-theme-toggle');
+    const statusToolbarToggle = document.getElementById('status-toolbar-toggle');
+    const statusLineToggle = document.getElementById('status-line-toggle');
+    const statusZoom = document.getElementById('status-zoom');
+    const tabBar = document.getElementById('tab-bar');
+    const recentsMenu = document.getElementById('recents-menu');
     
-    let fileHandle = null;
-    let isModified = false;
+    let previewTimeout;
+
+    const HELP_PAGE = `
+  __      __   _      ___    _ _ _             
+  \\ \\    / /__| |__  | __|__| (_) |_ ___ _ _ 
+   \\ \\/\\/ / -_) '_ \\ | _|/ _\` | |  _/ _ \\ '_|
+    \\_/\\_/\\___|_.__/ |___\\__,_|_|\\__\\___/_|  
+                                             
+Welcome to the Web Editor. A lightweight, browser-based environment for 
+code and text.
+
+[ KEYBOARD SHORTCUTS ]
+
++--------------------+------------------------------+
+| Command            | Action                       |
++--------------------+------------------------------+
+| Ctrl + S           | Save File                    |
+| Ctrl + O           | Open File                    |
+| Ctrl + M           | New Empty Buffer             |
+| Ctrl + P           | Toggle Live Preview          |
+| Ctrl + B           | Toggle Theme (Dark/Light)    |
+| Ctrl + L           | Toggle Line Numbers          |
+| Ctrl + [ / ]       | Switch Between Buffers       |
+| Ctrl + +/-         | Increase/Decrease Font Size  |
+| Ctrl + \\           | Toggle Button Bar (Toolbar)  |
+| Alt + H            | Show Help Page               |
+| Alt + R            | Open Recents Menu            |
++--------------------+------------------------------+
+
+[ HINTS ]
+- Preview works best for .html files.
+- Language detection is automatic based on file extension.
+- Buffers are automatically persisted in browser storage.
+`;
+
+    const getSavedState = (key, fallback) => {
+        try {
+            const val = localStorage.getItem(key);
+            if (val === null || val === "undefined") return fallback;
+            return JSON.parse(val);
+        } catch (e) {
+            return fallback;
+        }
+    };
 
     let state = {
         theme: localStorage.getItem('theme') || 'latte',
         showLines: localStorage.getItem('showLines') !== 'false',
+        showToolbar: localStorage.getItem('showToolbar') !== 'false',
         fontSize: parseInt(localStorage.getItem('fontSize')) || 18,
-        filename: 'untitled'
+        showPreview: localStorage.getItem('showPreview') === 'true',
+        splitPos: parseFloat(localStorage.getItem('splitPos')) || 50,
+        currentBufferIndex: getSavedState('currentBufferIndex', 0),
+        recentFiles: getSavedState('recentFiles', []), // Stores { name, content }
+        buffers: getSavedState('buffers', [{
+            id: Date.now(),
+            filename: 'help.txt',
+            content: HELP_PAGE,
+            isModified: false,
+            fileHandle: null
+        }])
     };
 
-    const updateUI = () => {
-        document.body.className = `theme-${state.theme} ${state.showLines ? '' : 'hide-lines'}`;
+    function setStatus(msg, duration = 3000) {
+        statusMessage.innerText = msg;
+        statusMessage.style.opacity = 1;
+        clearTimeout(window.statusTimeout);
+        window.statusTimeout = setTimeout(() => {
+            statusMessage.style.opacity = 0;
+        }, duration);
+    }
+
+    function getCurrentBuffer() {
+        return state.buffers[state.currentBufferIndex] || state.buffers[0] || null;
+    }
+
+    const getLanguageFromFilename = (filename) => {
+        const ext = filename.split('.').pop().toLowerCase();
+        switch (ext) {
+            case 'html': case 'xml': case 'svg': return 'markup';
+            case 'css': return 'css';
+            case 'js': return 'javascript';
+            case 'pas': case 'pp': case 'inc': return 'pascal';
+            case 'md': case 'markdown': case 'txt': return 'markdown';
+            default: return 'javascript';
+        }
+    };
+
+    function updateUI() {
+        document.body.className = `theme-${state.theme} ${state.showLines ? '' : 'hide-lines'} ${state.showToolbar ? '' : 'hide-toolbar'} ${state.showPreview ? 'show-preview' : ''}`;
         metaTheme.setAttribute('content', state.theme === 'latte' ? '#eff1f5' : '#303446');
         document.body.style.fontSize = `${state.fontSize}px`;
-        display.innerText = state.filename + (isModified ? ' •' : '');
-        document.title = state.filename;
-    };
+        
+        const buf = getCurrentBuffer();
+        if (buf) {
+            statusFilename.innerText = buf.filename + (buf.isModified ? '*' : '');
+            statusLang.innerText = getLanguageFromFilename(buf.filename);
+            document.title = buf.filename + (buf.isModified ? '*' : '');
+        }
+        
+        statusThemeToggle.innerText = `Theme: ${state.theme.charAt(0).toUpperCase() + state.theme.slice(1)}`;
+        statusToolbarToggle.innerText = `Toolbar: ${state.showToolbar ? 'ON' : 'OFF'}`;
+        statusLineToggle.innerText = `Lines: ${state.showLines ? 'ON' : 'OFF'}`;
+        statusZoom.innerText = `${state.fontSize}px`;
+
+        renderTabs();
+        renderRecentsMenu();
+        
+        if (state.showPreview) {
+            editorWrapper.style.width = `${state.splitPos}%`;
+            updatePreview();
+        } else {
+            editorWrapper.style.width = '100%';
+        }
+    }
+
+    function renderTabs() {
+        tabBar.innerHTML = '';
+        state.buffers.forEach((buf, idx) => {
+            const tab = document.createElement('div');
+            tab.className = `buffer-tab ${idx === state.currentBufferIndex ? 'active' : ''}`;
+            tab.innerHTML = `
+                <span>${buf.filename}${buf.isModified ? '*' : ''}</span>
+                <span class="buffer-close">×</span>
+            `;
+            tab.querySelector('.buffer-close').onclick = (e) => {
+                e.stopPropagation();
+                closeBuffer(idx);
+            };
+            tab.onclick = () => switchBuffer(idx);
+            tabBar.appendChild(tab);
+        });
+    }
+
+    function toggleToolbar() {
+        state.showToolbar = !state.showToolbar;
+        localStorage.setItem('showToolbar', state.showToolbar);
+        updateUI();
+    }
+
+    function toggleRecents(e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        const isVisible = window.getComputedStyle(recentsMenu).display === 'block';
+        recentsMenu.style.display = isVisible ? 'none' : 'block';
+    }
+
+    function showHelp() {
+        const existingHelpIdx = state.buffers.findIndex(b => b.filename === 'help.txt');
+        if (existingHelpIdx !== -1) {
+            switchBuffer(existingHelpIdx);
+        } else {
+            addNewBuffer(HELP_PAGE, 'help.txt');
+        }
+    }
+
+    function clearRecents() {
+        state.recentFiles = [];
+        localStorage.setItem('recentFiles', JSON.stringify([]));
+        renderRecentsMenu();
+        setStatus('Recents list cleared');
+    }
+
+    function renderRecentsMenu() {
+        if (!state.recentFiles || state.recentFiles.length === 0) {
+            recentsMenu.innerHTML = '<div class="recent-empty">No recent files</div>';
+            return;
+        }
+
+        let html = state.recentFiles.map(file => `
+            <div class="recent-item file-item" title="${file.name}">${file.name}</div>
+        `).join('');
+
+        html += `<div class="recent-item clear-all">CLEAR LIST</div>`;
+        
+        recentsMenu.innerHTML = html;
+        
+        recentsMenu.querySelectorAll('.file-item').forEach(item => {
+            item.onclick = (e) => {
+                e.stopPropagation();
+                openRecent(item.innerText);
+                recentsMenu.style.display = 'none';
+            };
+        });
+
+        recentsMenu.querySelector('.clear-all').onclick = (e) => {
+            e.stopPropagation();
+            clearRecents();
+            recentsMenu.style.display = 'none';
+        };
+    }
+
+    function addToRecents(filename, content) {
+        if (!filename || filename === 'untitled' || filename === 'help.txt') return;
+        // Keep unique by name, add new to front, limit to 10
+        state.recentFiles = [
+            { name: filename, content: content }, 
+            ...state.recentFiles.filter(f => f.name !== filename)
+        ].slice(0, 10);
+        localStorage.setItem('recentFiles', JSON.stringify(state.recentFiles));
+        renderRecentsMenu();
+    }
+
+    function openRecent(filename) {
+        // 1. Check if it's already in an active tab (buffer)
+        const existingIdx = state.buffers.findIndex(b => b.filename === filename);
+        if (existingIdx !== -1) {
+            switchBuffer(existingIdx);
+            setStatus(`Switched to: ${filename}`);
+            return;
+        } 
+        
+        // 2. If not, check if we have the content cached in recents
+        const cached = state.recentFiles.find(f => f.name === filename);
+        if (cached && cached.content) {
+            addNewBuffer(cached.content, cached.name);
+            setStatus(`Restored: ${filename}`);
+            return;
+        }
+
+        // 3. Fallback to picker if nothing is found
+        openFile();
+    }
+
+    function switchBuffer(index) {
+        if (index < 0 || index >= state.buffers.length) return;
+        
+        const current = getCurrentBuffer();
+        if (current) current.content = editor.value;
+        
+        state.currentBufferIndex = index;
+        const next = state.buffers[index];
+        if (next) {
+            editor.value = next.content;
+            localStorage.setItem('currentBufferIndex', index);
+            persistBuffers();
+            updateUI();
+            updateHighlighting();
+            updateCursorPos();
+        }
+    }
+
+    function addNewBuffer(content = '', filename = 'untitled') {
+        const current = getCurrentBuffer();
+        if (current) current.content = editor.value;
+        
+        const newBuf = {
+            id: Date.now(),
+            filename: filename,
+            content: content,
+            isModified: false,
+            fileHandle: null
+        };
+        state.buffers.push(newBuf);
+        switchBuffer(state.buffers.length - 1);
+        editor.focus();
+    }
+
+    function closeBuffer(index) {
+        const buf = state.buffers[index];
+        if (!buf) return;
+
+        const performClose = () => {
+            state.buffers.splice(index, 1);
+            if (state.buffers.length === 0) {
+                state.buffers = [{
+                    id: Date.now(),
+                    filename: 'help.txt',
+                    content: HELP_PAGE,
+                    isModified: false,
+                    fileHandle: null
+                }];
+            }
+            state.currentBufferIndex = Math.max(0, Math.min(state.currentBufferIndex, state.buffers.length - 1));
+            editor.value = state.buffers[state.currentBufferIndex].content;
+            persistBuffers();
+            updateUI();
+            updateHighlighting();
+        };
+
+        if (buf.isModified) {
+            showModal("Unsaved Changes", `Buffer "${buf.filename}" has unsaved changes. Close anyway?`, performClose);
+        } else {
+            performClose();
+        }
+    }
+
+    function persistBuffers() {
+        const current = getCurrentBuffer();
+        if (current) current.content = editor.value;
+        
+        const dataToSave = state.buffers.map(b => ({ 
+            ...b, 
+            fileHandle: null // Cannot persist handles in LS
+        }));
+        localStorage.setItem('buffers', JSON.stringify(dataToSave));
+    }
+
+    function toggleTheme() {
+        state.theme = state.theme === 'latte' ? 'frappe' : 'latte';
+        localStorage.setItem('theme', state.theme);
+        updateUI();
+    }
+
+    function toggleLines() {
+        state.showLines = !state.showLines;
+        localStorage.setItem('showLines', state.showLines);
+        updateUI();
+    }
+
+    // Resizing Logic
+    let isDragging = false;
+    resizer.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        document.body.classList.add('dragging');
+        resizer.classList.add('dragging');
+        e.preventDefault();
+    });
+    window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const containerRect = container.getBoundingClientRect();
+        let percentage = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+        percentage = Math.max(10, Math.min(90, percentage));
+        state.splitPos = percentage;
+        editorWrapper.style.width = `${percentage}%`;
+        localStorage.setItem('splitPos', percentage);
+    });
+    window.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            document.body.classList.remove('dragging');
+            resizer.classList.remove('dragging');
+        }
+    });
 
     const updateLines = () => {
         const lines = editor.value.split('\n').length;
@@ -156,115 +744,124 @@
     };
 
     const updateHighlighting = () => {
+        const buf = getCurrentBuffer();
+        if (!buf) return;
+        const lang = getLanguageFromFilename(buf.filename);
+        highlightContent.className = `language-${lang}`;
         let text = editor.value;
         let highlighted = text
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
             .replace(/\t/g, '<span class="tab-symbol">»   </span>\t');
-
         highlightContent.innerHTML = highlighted;
         Prism.highlightElement(highlightContent);
         updateLines();
     };
 
-    // --- NEW FILE LOGIC ---
-    function triggerNewFile() {
-        if (isModified) {
-            modalOverlay.style.display = 'flex';
-        } else {
-            confirmNewFile();
-        }
+    const updatePreview = () => {
+        clearTimeout(previewTimeout);
+        previewTimeout = setTimeout(() => {
+            if (!state.showPreview) return;
+            previewFrame.srcdoc = editor.value;
+        }, 300);
+    };
+
+    const updateCursorPos = () => {
+        const textBefore = editor.value.substring(0, editor.selectionStart);
+        const lines = textBefore.split('\n');
+        const row = lines.length;
+        const col = lines[lines.length - 1].length + 1;
+        statusPos.innerText = `L:${row} C:${col}`;
+        const words = editor.value.trim() ? editor.value.trim().split(/\s+/).length : 0;
+        const chars = editor.value.length;
+        statusStats.innerText = `Words: ${words} Chars: ${chars}`;
+    };
+
+    function showModal(title, body, onConfirm) {
+        document.getElementById('modal-title').innerText = title;
+        document.getElementById('modal-body').innerText = body;
+        const confirmBtn = document.getElementById('modal-confirm');
+        confirmBtn.onclick = () => { closeModal(); onConfirm(); };
+        modalOverlay.style.display = 'flex';
     }
 
-    function closeModal() {
-        modalOverlay.style.display = 'none';
-    }
-
-    function confirmNewFile() {
-        closeModal();
-        fileHandle = null;
-        editor.value = '';
-        state.filename = 'untitled';
-        isModified = false;
-        localStorage.removeItem('last-content');
-        updateUI();
-        updateHighlighting();
-        editor.focus();
-    }
+    function closeModal() { modalOverlay.style.display = 'none'; }
 
     async function saveFile() {
+        const buf = getCurrentBuffer();
         try {
-            if (!fileHandle) fileHandle = await window.showSaveFilePicker();
-            const writable = await fileHandle.createWritable();
+            if (!buf.fileHandle) {
+                buf.fileHandle = await window.showSaveFilePicker({
+                    types: [
+                        { description: 'Text File', accept: { 'text/plain': ['.txt', '.md'] } },
+                        { description: 'JavaScript', accept: { 'text/javascript': ['.js'] } },
+                        { description: 'HTML/Web', accept: { 'text/html': ['.html', '.htm'] } }
+                    ]
+                });
+            }
+            const writable = await buf.fileHandle.createWritable();
             await writable.write(editor.value);
             await writable.close();
-            const file = await fileHandle.getFile();
-            state.filename = file.name;
-            isModified = false;
+            const file = await buf.fileHandle.getFile();
+            buf.filename = file.name;
+            buf.isModified = false;
+            addToRecents(file.name, editor.value);
+            setStatus(`Saved: ${file.name}`);
             updateUI();
+            updateHighlighting();
+            persistBuffers();
             document.body.classList.add('pulse');
             setTimeout(() => document.body.classList.remove('pulse'), 150);
-        } catch (e) { 
-            // Handle cancel or errors
+        } catch (e) {
+            setStatus('Save cancelled');
         }
     }
 
     async function openFile() {
         try {
-            [fileHandle] = await window.showOpenFilePicker();
-            const file = await fileHandle.getFile();
-            editor.value = await file.text();
-            state.filename = file.name;
-            isModified = false;
-            updateUI();
-            updateHighlighting();
-        } catch (e) {}
+            const [handle] = await window.showOpenFilePicker();
+            const file = await handle.getFile();
+            const content = await file.text();
+            addToRecents(file.name, content);
+            const existingIdx = state.buffers.findIndex(b => b.filename === file.name);
+            if (existingIdx !== -1) {
+                state.buffers[existingIdx].content = content;
+                switchBuffer(existingIdx);
+            } else {
+                addNewBuffer(content, file.name);
+                const current = getCurrentBuffer();
+                if (current) current.fileHandle = handle;
+                updateHighlighting();
+            }
+            setStatus(`Opened: ${file.name}`);
+        } catch (e) {
+            setStatus('Open cancelled');
+        }
     }
 
     const handleShortcuts = (e) => {
         const isMod = e.ctrlKey || e.metaKey;
-
-        // New File: Ctrl + M
-        if (isMod && e.code === 'KeyM') {
-            e.preventDefault();
-            triggerNewFile();
-        }
-
-        // Theme: Ctrl + B
-        if (isMod && e.code === 'KeyB') {
-            e.preventDefault();
-            state.theme = state.theme === 'latte' ? 'frappe' : 'latte';
-            localStorage.setItem('theme', state.theme);
-            updateUI();
-        }
-
-        // Lines: Ctrl + L
-        if (isMod && e.code === 'KeyL') {
-            e.preventDefault();
-            state.showLines = !state.showLines;
-            localStorage.setItem('showLines', state.showLines);
-            updateUI();
-        }
-
-        // Zoom: Ctrl + / Ctrl -
-        if (isMod && (e.key === '=' || e.key === '+')) {
-            e.preventDefault();
-            state.fontSize += 1;
-            localStorage.setItem('fontSize', state.fontSize);
-            updateUI();
-        }
-        if (isMod && e.key === '-') {
-            e.preventDefault();
-            state.fontSize = Math.max(8, state.fontSize - 1);
-            localStorage.setItem('fontSize', state.fontSize);
-            updateUI();
-        }
-
-        // File: Ctrl + S / Ctrl + O
+        // Navigation / View
+        if (isMod && e.code === 'KeyP') { e.preventDefault(); state.showPreview = !state.showPreview; localStorage.setItem('showPreview', state.showPreview); updateUI(); }
+        if (isMod && e.code === 'KeyB') { e.preventDefault(); toggleTheme(); }
+        if (isMod && e.code === 'KeyL') { e.preventDefault(); toggleLines(); }
+        if (isMod && e.code === 'Backslash') { e.preventDefault(); toggleToolbar(); }
+        
+        // File Ops
+        if (isMod && e.code === 'KeyM') { e.preventDefault(); addNewBuffer(); }
         if (isMod && e.code === 'KeyS') { e.preventDefault(); saveFile(); }
         if (isMod && e.code === 'KeyO') { e.preventDefault(); openFile(); }
-
-        // Tab Handling
+        
+        // Menus / Help
+        if (e.altKey && e.code === 'KeyH') { e.preventDefault(); showHelp(); }
+        if (e.altKey && e.code === 'KeyR') { e.preventDefault(); toggleRecents(); }
+        
+        // Misc
+        if (isMod && (e.key === '=' || e.key === '+')) { e.preventDefault(); state.fontSize += 1; localStorage.setItem('fontSize', state.fontSize); updateUI(); }
+        if (isMod && e.key === '-') { e.preventDefault(); state.fontSize = Math.max(8, state.fontSize - 1); localStorage.setItem('fontSize', state.fontSize); updateUI(); }
+        if (isMod && e.key === ']') { e.preventDefault(); switchBuffer((state.currentBufferIndex + 1) % state.buffers.length); }
+        if (isMod && e.key === '[') { e.preventDefault(); switchBuffer((state.currentBufferIndex - 1 + state.buffers.length) % state.buffers.length); }
+        
         if (e.key === 'Tab') {
             e.preventDefault();
             const start = editor.selectionStart;
@@ -272,15 +869,28 @@
             editor.value = editor.value.substring(0, start) + "\t" + editor.value.substring(end);
             editor.selectionStart = editor.selectionEnd = start + 1;
             updateHighlighting();
+            updatePreview();
+            updateCursorPos();
         }
     };
 
-    editor.addEventListener('input', () => {
-        updateHighlighting();
-        if (!isModified) { isModified = true; updateUI(); }
-        localStorage.setItem('last-content', editor.value);
+    window.addEventListener('mousedown', (e) => {
+        if (!document.getElementById('recents-container').contains(e.target)) {
+            recentsMenu.style.display = 'none';
+        }
     });
 
+    editor.addEventListener('input', () => {
+        updateHighlighting();
+        updatePreview();
+        updateCursorPos();
+        const buf = getCurrentBuffer();
+        if (buf && !buf.isModified) { buf.isModified = true; updateUI(); }
+        persistBuffers();
+    });
+
+    editor.addEventListener('mouseup', updateCursorPos);
+    editor.addEventListener('keyup', (e) => { if (!e.ctrlKey && !e.metaKey) updateCursorPos(); });
     editor.addEventListener('scroll', () => {
         const layer = document.getElementById('highlight-layer');
         layer.scrollTop = gutter.scrollTop = editor.scrollTop;
@@ -290,9 +900,23 @@
     window.addEventListener('keydown', handleShortcuts);
     
     window.onload = () => {
+        document.getElementById('new-buffer-btn').onclick = () => addNewBuffer();
+        document.getElementById('open-btn').onclick = openFile;
+        document.getElementById('save-btn').onclick = saveFile;
+        document.getElementById('help-btn').onclick = showHelp;
+        document.getElementById('recents-btn').onclick = toggleRecents;
+
+        const current = getCurrentBuffer();
+        if (current) {
+            editor.value = current.content;
+        } else {
+            showHelp();
+        }
+        
         updateUI();
-        editor.value = localStorage.getItem('last-content') || '';
         updateHighlighting();
+        updateCursorPos();
+        if (state.showPreview) updatePreview();
     };
 </script>
 </body>
